@@ -194,7 +194,8 @@ public:
         {
             const T start = (static_cast<T>(i * block_size) + first_index_T);
             const T end = (i == num_blocks - 1) ? index_after_last_T : (static_cast<T>((i + 1) * block_size) + first_index_T);
-            mf.f[i] = submit(loop, start, end);
+			// TODO: prio arg
+            mf.f[i] = submit(0, loop, start, end);
         }
         return mf;
     }
@@ -204,18 +205,19 @@ public:
      *
      * @tparam F The type of the function.
      * @tparam A The types of the arguments.
+     * @param priority The priority of the Task to execute.
      * @param task The function to push.
      * @param args The arguments to pass to the function.
      */
     template <typename F, typename... A>
-    void push_task(const F& task, const A&... args)
+    void push_task(int16_t priority, const F& task, const A&... args)
     {
         {
             const std::scoped_lock tasks_lock(tasks_mutex);
             if constexpr (sizeof...(args) == 0)
-                tasks.push(std::function<void()>(task));
+                tasks.push(std::make_pair(priority, std::function<void()>(task)));
             else
-                tasks.push(std::function<void()>([task, args...] { task(args...); }));
+                tasks.push(std::make_pair(priority, std::function<void()>([task, args...] { task(args...); })));
         }
         ++tasks_total;
         task_available_cv.notify_one();
@@ -244,15 +246,17 @@ public:
      * @tparam F The type of the function.
      * @tparam A The types of the zero or more arguments to pass to the function.
      * @tparam R The return type of the function (can be void).
+     * @param priority The priority of the task.
      * @param task The function to submit.
      * @param args The zero or more arguments to pass to the function.
      * @return A future to be used later to wait for the function to finish executing and/or obtain its returned value if it has one.
      */
     template <typename F, typename... A, typename R = std::invoke_result_t<std::decay_t<F>, std::decay_t<A>...>>
-    [[nodiscard]] std::future<R> submit(const F& task, const A&... args)
+    [[nodiscard]] std::future<R> submit(int16_t priority, const F& task, const A&... args)
     {
         std::shared_ptr<std::promise<R>> task_promise = std::make_shared<std::promise<R>>();
         push_task(
+			priority,
             [task, args..., task_promise]
             {
                 try
@@ -362,7 +366,7 @@ private:
             task_available_cv.wait(tasks_lock, [&] { return !tasks.empty() || !running; });
             if (running && !paused)
             {
-                task = std::move(tasks.front());
+                task = std::move(tasks.top().second);
                 tasks.pop();
                 tasks_lock.unlock();
                 task();
@@ -393,10 +397,19 @@ private:
      */
     std::condition_variable task_done_cv = {};
 
+	using task_t = std::pair<int16_t, std::function<void()>>;
+
+	struct task_priority_comparator final {
+		bool operator()(const task_t& a, const task_t& b) {
+			return a.first < b.first;
+		}
+	};
+
     /**
      * @brief A queue of tasks to be executed by the threads.
      */
-    std::queue<std::function<void()>> tasks = {};
+	std::priority_queue<task_t, std::vector<task_t>, task_priority_comparator> tasks {};
+    //std::queue<std::function<void()>> tasks = {};
 
     /**
      * @brief An atomic variable to keep track of the total number of unfinished tasks - either still in the queue, or running in a thread.

@@ -181,6 +181,7 @@ BS::concurrency_t count_unique_threads()
     pool.wait_for_tasks();
     for (std::thread::id& id : thread_IDs)
         pool.push_task(
+			0,
             [&]
             {
                 id = std::this_thread::get_id();
@@ -243,14 +244,14 @@ void check_push_task()
     dual_println("Checking that push_task() works for a function with no arguments or return value...");
     {
         bool flag = false;
-        pool.push_task([&flag] { flag = true; });
+        pool.push_task(0, [&flag] { flag = true; });
         pool.wait_for_tasks();
         check(flag);
     }
     dual_println("Checking that push_task() works for a function with one argument and no return value...");
     {
         bool flag = false;
-        pool.push_task([](bool* flag_) { *flag_ = true; }, &flag);
+        pool.push_task(0, [](bool* flag_) { *flag_ = true; }, &flag);
         pool.wait_for_tasks();
         check(flag);
     }
@@ -258,7 +259,7 @@ void check_push_task()
     {
         bool flag1 = false;
         bool flag2 = false;
-        pool.push_task([](bool* flag1_, bool* flag2_) { *flag1_ = *flag2_ = true; }, &flag1, &flag2);
+        pool.push_task(0, [](bool* flag1_, bool* flag2_) { *flag1_ = *flag2_ = true; }, &flag1, &flag2);
         pool.wait_for_tasks();
         check(flag1 && flag2);
     }
@@ -272,26 +273,27 @@ void check_submit()
     dual_println("Checking that submit() works for a function with no arguments or return value...");
     {
         bool flag = false;
-        pool.submit([&flag] { flag = true; }).wait();
+        pool.submit(0, [&flag] { flag = true; }).wait();
         check(flag);
     }
     dual_println("Checking that submit() works for a function with one argument and no return value...");
     {
         bool flag = false;
-        pool.submit([](bool* flag_) { *flag_ = true; }, &flag).wait();
+        pool.submit(0, [](bool* flag_) { *flag_ = true; }, &flag).wait();
         check(flag);
     }
     dual_println("Checking that submit() works for a function with two arguments and no return value...");
     {
         bool flag1 = false;
         bool flag2 = false;
-        pool.submit([](bool* flag1_, bool* flag2_) { *flag1_ = *flag2_ = true; }, &flag1, &flag2).wait();
+        pool.submit(0, [](bool* flag1_, bool* flag2_) { *flag1_ = *flag2_ = true; }, &flag1, &flag2).wait();
         check(flag1 && flag2);
     }
     dual_println("Checking that submit() works for a function with no arguments and a return value...");
     {
         bool flag = false;
         std::future<int> my_future = pool.submit(
+			0,
             [&flag]
             {
                 flag = true;
@@ -303,6 +305,7 @@ void check_submit()
     {
         bool flag = false;
         std::future<int> my_future = pool.submit(
+			0,
             [](bool* flag_)
             {
                 *flag_ = true;
@@ -316,6 +319,7 @@ void check_submit()
         bool flag1 = false;
         bool flag2 = false;
         std::future<int> my_future = pool.submit(
+			0,
             [](bool* flag1_, bool* flag2_)
             {
                 *flag1_ = *flag2_ = true;
@@ -335,6 +339,7 @@ void check_wait_for_tasks()
     std::unique_ptr<std::atomic<bool>[]> flags = std::make_unique<std::atomic<bool>[]>(n);
     for (BS::concurrency_t i = 0; i < n; ++i)
         pool.push_task(
+			0,
             [&flags, i]
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(10));
@@ -442,6 +447,7 @@ void check_task_monitoring()
     std::unique_ptr<std::atomic<bool>[]> release = std::make_unique<std::atomic<bool>[]>(n * 3);
     for (BS::concurrency_t i = 0; i < n * 3; ++i)
         pool.push_task(
+			0,
             [&release, i]
             {
                 while (!release[i])
@@ -488,6 +494,7 @@ void check_pausing()
     dual_println("Submitting ", n * 3, " tasks, each one waiting for 200ms.");
     for (BS::concurrency_t i = 0; i < n * 3; ++i)
         pool.push_task(
+			0,
             [i]
             {
                 std::this_thread::sleep_for(std::chrono::milliseconds(200));
@@ -537,6 +544,7 @@ void check_exceptions()
 {
     bool caught = false;
     std::future<void> my_future = pool.submit(
+		0,
         []
         {
             dual_println("Throwing exception...");
